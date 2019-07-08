@@ -1,5 +1,5 @@
 //=============================================================================
-// 戦闘時のウィンドウ配置を変更するプラグイン
+// Plug-in to change the window layout in battle
 // FTKR_BattleWindowLayout.js
 // プラグインNo : 76
 // 作成者     : フトコロ
@@ -16,89 +16,89 @@ FTKR.BWL = FTKR.BWL || {};
 
 //=============================================================================
 /*:
- * @plugindesc v1.2.0 戦闘時のウィンドウ配置を変更する
+ * @plugindesc v1.2.0 Change the window layout in battle
  * @author フトコロ
  *
  * @param Show Actor Face
- * @desc アクターの顔画像を表示する
+ * @desc Display actors face image
  * @type boolean
- * @on 有効
- * @off 無効
+ * @on enable
+ * @off disable
  * @default true
  * 
  * @param Party
- * @text パーティーコマンドの設定
+ * @text Party command settings
  * 
  * @param Party Command PositionY
- * @desc パーティーコマンドウィンドウを表示する縦の位置を指定します。
+ * @desc Specifies the vertical position where the party command window is displayed.
  * @type select
- * @option ステータスウィンドウの上に横に表示
+ * @option Display horizontally above the status window
  * @value 0
- * @option 画面中央
+ * @option Center of picture
  * @value 1
  * @default 0
  * @parent Party
  * 
  * @param Party Command PositionX
- * @desc パーティーコマンドウィンドウを表示する横の位置を指定します。
+ * @desc Specify the horizontal position where the party command window is displayed.
  * @type select
- * @option 左寄せ
+ * @option Left-aligned
  * @value 0
- * @option 中央
+ * @option Centered
  * @value 1
- * @option 右寄せ
+ * @option Right-aligned
  * @value 2
  * @default 0
  * @parent Party
  * 
  * @param Party Command Window
- * @desc パーティーコマンドウィンドウの表示設定
+ * @desc Party Command Window Display Settings
  * @type struct<window>
  * @default {"width":"","height":"","background":"0"}
  * @parent Party
  * 
  * @param Actor
- * @text アクターコマンドの設定
+ * @text Actor command settings
  * 
  * @param Actor Command Position
- * @desc アクターコマンドウィンドウを表示する場所を指定します。
+ * @desc Specify where to display the actor command window.
  * @type select
- * @option ステータスウィンドウのアクターに重ねる
+ * @option Overlap actors in the status window
  * @value 0
- * @option ステータスウィンドウの上に横に表示
+ * @option Horizontally above the status window
  * @value 1
- * @option ステータスウィンドウのアクターの上に縦に表示
+ * @option Display vertically above actors in the status window
  * @value 2
  * @default 0
  * @parent Actor
  *
  * @param Actor Command PositionY
- * @desc アクターコマンドウィンドウを表示する縦の位置を指定します。
- * ステータスウィンドウの上表示の場合は無効です。
+ * @desc Specify the vertical position where the actor command window is displayed.
+ * It is invalid when displayed above the status window.
  * @type select
- * @option 上寄せ
+ * @option Top
  * @value 0
- * @option 中央
+ * @option Middle
  * @value 1
- * @option 下寄せ
+ * @option Bottom
  * @value 2
  * @default 0
  * @parent Actor
  *
  * @param Actor Command PositionX
- * @desc アクターコマンドウィンドウを表示する横の位置を指定します。
+ * @desc Specify the horizontal position where the actor command window is displayed.
  * @type select
- * @option 右寄せ
+ * @option Right-aligned
  * @value 0
- * @option 中央
+ * @option Centered
  * @value 1
- * @option 左寄せ
+ * @option Left justified
  * @value 2
  * @default 0
  * @parent Actor
  *
  * @param Actor Command Window
- * @desc アクターコマンドウィンドウの表示設定
+ * @desc Actor command window display settings
  * Actor Command Position の設定により一部の設定が無効になる
  * @type struct<window>
  * @default {"width":"","height":"","background":"0"}
@@ -108,32 +108,31 @@ FTKR.BWL = FTKR.BWL || {};
  *-----------------------------------------------------------------------------
  * 概要
  *-----------------------------------------------------------------------------
- * 戦闘時のウィンドウ配置やサイズを変更します。
+ * Change the window layout and size during battle.
  * 
- * １．ステータスウィンドウの幅を画面サイズと同じにします。
- * ２．ステータスウィンドウのアクターを横並びに変更します。(*1)
- * ３．アクターコマンドウィンドウの表示位置を、ステータスウィンドウの
- * 　　選択中のアクターに重ねます。(*2)
- * ４．パーティーコマンドウィンドウをステータスウィンドウの上に表示し
- * 　　コマンドを横並びにします。
+ * １．Make the width of the status window the same as the screen size.
+ * ２．Change the actors in the status window side by side. (* 1)
+ * 3. Overlay the actor command window display position with the selected
+ *    actor in the status window. (* 2)
+ * 4. Display the party command window above the status window and place
+ *    the commands side by side.
  * 
  * 
- * (*1) ステータスウィンドウの表示内容は、顔画像、名前、ステート、HP、MP、TPです。
- *      顔画像は、プラグインパラメータで表示のON/OFFを変えられます。
- *      TPは、「バトル画面でTPを表示」にチェックが入っている場合に表示します。
+ * (* 1) The display contents of the status window are face image, name, state, HP, MP, TP.
+ *       The face image can be turned ON / OFF by the plug-in parameter.
+ *       TP is displayed when "Display TP in battle screen" is checked.
  * 
- * (*2) プラグインパラメータで、パーティーコマンドウィンドウと同じ表示位置に
- *      変更できます。
+ * (* 2) The plug-in parameter can be changed to the same display position as
+ *       the party command window.
  * 
  * 
  *-----------------------------------------------------------------------------
- * 設定方法
+ * How to set up
  *-----------------------------------------------------------------------------
- * 1.「プラグインマネージャー(プラグイン管理)」に、本プラグインを追加して
- *    ください。
+ * 1. Add this plug-in to "Plug-in Manager (Plug-in Management)".
  * 
- * 2. FTKR_AlternatingTurnBattle.jsと組み合わせる場合は、このプラグインが
- *    下になるように配置してください。
+ * 2. When combined with FTKR_AlternatingTurnBattle.js, place this plug-in
+ *    below it.
  * 
  * 
  *-----------------------------------------------------------------------------
