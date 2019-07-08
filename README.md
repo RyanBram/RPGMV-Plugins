@@ -1,3 +1,9 @@
+## Futokoro
+| Plugins                                                                                                            | Updated       | Description                        |
+| ------------------------------------------------------------------------------------------------------------------ | ------------- | ---------------------------------- |
+| [FTKR Battle](https://raw.githubusercontent.com/RyanBram/RPGMV-Plugins/master/Futokoro/FTKR_BattleWindowLayout.js) | Apr 08, 2018 | Change the window layout in battle |
+
+
 ## Triacontane
 
 | Plugins                                                                                                                              | Updated      | Description                                            |
