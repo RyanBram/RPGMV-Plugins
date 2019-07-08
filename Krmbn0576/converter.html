@@ -1,0 +1,904 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="main.css">
+    <title>RPGツクール2000→MV素材変換器</title>
+</head>
+<body>
+    <p><a href="homepage.html">くらむぼんのホームページ</a>　←RPGツクールMV用のプラグインや音楽素材・ゲームを置いてます。</p>
+    <p><a href="http://ohhiru.info/upscale/">ドット絵をアップスケールするやつ</a>　←「なめらかに拡大」のスクリプト（xBR法）をお借りしました。ありがとうございます！</p>
+    <h1>RPGツクール2000→MV素材変換器</h1>
+    <ol>
+        <li>下部の<strong>設定</strong>を調節（基本的にそのままでOK。「拡大方式」は好みで決めてください）</li>
+        <li><strong>「変換する画像を選択」</strong>を押してRPGツクール2000のキャラチップor顔グラフィックorマップチップを選択（直接ドラッグ＆ドロップしてもＯＫ）</li>
+        <li>一番下にRPGツクールMVの素材に変換された画像が表示されるので右クリックして<strong>「名前を付けて画像を保存」</strong></li>
+        <li>１～３を気が済むまで繰り返す（複数の画像を一気に変換することも可能。出力画像は一番下にどんどん追加されていきます）</li>
+    </ol>
+    <p>※拡大方式別のサンプルを見たかったり、拡大倍率の使い分け方を知りたい場合は<a href="./?converter" target="_blank">変換器のサンプルと解説（RPGツクールMV製）</a>をご覧ください。</p>
+    <button type="button" id="dummy">変換する画像を選択</button>
+    <input type="file" id="image" style="display: none;" multiple>
+    <div class="options">
+        <div>
+            ・キャラチップ設定
+            <div class="item">
+                拡大方式<br>
+                <label><input type="radio" name="upscale" id="dot">：ドット絵のまま拡大</label><br>
+                <label><input type="radio" name="upscale" id="xbr" checked>：なめらかに拡大</label>
+            </div>
+            <div class="item">
+                拡大倍率<br>
+                <label><input type="radio" name="scale" id="even">：１倍</label><br>
+                <label><input type="radio" name="scale" id="twice" checked>：２倍（MVのキャラやマップの大きさに近いサイズ）</label><br>
+                <label><input type="radio" name="scale" id="three">：３倍（2000のマップ（３倍拡大）に近いサイズ）</label>
+            </div>
+        </div>
+        <hr>
+        <div>
+            ・顔グラフィック設定（拡大方式は「ブラウザ標準」、拡大倍率は「３倍」で固定。ぼやけ気味なのでwaifu2x-caffeなどでの拡大をおすすめします）
+        </div>
+        <hr>
+        <div>
+            ・マップチップ設定
+            <div class="item">
+                拡大方式<br>
+                ドット絵のまま拡大で固定
+            </div>
+            <div class="item">
+                拡大倍率<br>
+                <label><input type="radio" name="chipscale" id="chipeven">：１倍</label><br>
+                <label><input type="radio" name="chipscale" id="chiptwice">：２倍</label><br>
+                <label><input type="radio" name="chipscale" id="chipthree" checked>：３倍（推奨。MVのマップと同じサイズ）</label>
+            </div>
+            <div class="item">
+                おまけ<br>
+                <label><input type="checkbox" id="autotile">：オートタイル全パターンを出力</label><br>
+                <label><input type="checkbox" id="animation">：アニメーションタイルを出力</label>
+            </div>
+        </div>
+    </div>
+    <div id="xBRscript" style="display: none;">
+        //このタグ内のスクリプトは「ドット絵をアップスケールするやつ」よりお借りしました。ありがとうございます！
+        (function () {
+            "use strict";
+
+            var global = new Function("return this")();
+
+            var YMASK = 0xff0000;
+            var UMASK = 0x00ff00;
+            var VMASK = 0x0000ff;
+
+            var RGBtoYUV = new Uint32Array(1 << 24);
+
+            for (var bg = -255; bg < 256; bg++) {
+                for (var rg = -255; rg < 256; rg++) {
+                    var u = (((-169 * rg + 500 * bg) / 1000) | 0) + 128;
+                    var v = (((500 * rg - 81 * bg) / 1000) | 0) + 128;
+                    var startg = Math.max(-bg, -rg, 0);
+                    var endg = Math.min(255 - bg, 255 - rg, 255);
+                    var y = (((299 * rg + 1000 * startg + 114 * bg) | 0) / 1000);
+                    var c = bg + (rg << 16) + 0x010101 * startg;
+
+                    for (var g = startg; g <= endg; g++) {
+                        RGBtoYUV[c] = ((y++) << 16) + (u << 8) + v;
+                        c += 0x010101;
+                    }
+                }
+            }
+
+            function pixelDiff(x, y) {
+                var yuv1 = RGBtoYUV[x & 0xffffff];
+                var yuv2 = RGBtoYUV[y & 0xffffff];
+
+                return (Math.abs((yuv1 & YMASK) - (yuv2 & YMASK)) >> 16) |
+                (Math.abs((yuv1 & UMASK) - (yuv2 & UMASK)) >> 8) |
+                Math.abs((yuv1 & VMASK) - (yuv2 & VMASK));
+            }
+
+            function alphaBlendBase(a, b, m, s) {
+                var total = m + s;
+
+                return (((((a) & 0xff) * m + ((b) & 0xff) * s) / total)) |
+                (((((a >> 8) & 0xff) * m + ((b >> 8) & 0xff) * s) / total) << 8) |
+                (((((a >> 16) & 0xff) * m + ((b >> 16) & 0xff) * s) / total) << 16) |
+                (((((a >> 24) & 0xff) * m + ((b >> 24) & 0xff) * s) / total) << 24);
+            }
+
+            function alphaBlend32W(a, b) {
+                return alphaBlendBase(a, b, 7, 1);
+            }
+
+            function alphaBlend64W(a, b) {
+                return alphaBlendBase(a, b, 3, 1);
+            }
+
+            function alphaBlend128W(a, b) {
+                return alphaBlendBase(a, b, 1, 1);
+            }
+
+            function alphaBlend192W(a, b) {
+                return alphaBlendBase(a, b, 1, 3);
+            }
+
+            function alphaBlend224W(a, b) {
+                return alphaBlendBase(a, b, 1, 7);
+            }
+
+            function df(A, B) {
+                return pixelDiff(A, B);
+            }
+            function eq(A, B) {
+                return (df(A, B) < 155);
+            }
+
+            function filter2x(E, PE, PI, PH, PF, PG, PC, PD, PB, PA, G5, C4, G0, D0, C1, B1, F4, I4, H5, I5, A0, A1, N0, N1, N2, N3) {
+                if (PE != PH && PE != PF) {
+                    var e = df(PE, PC) + df(PE, PG) + df(PI, H5) + df(PI, F4) + (df(PH, PF) << 2);
+                    var i = df(PH, PD) + df(PH, I5) + df(PF, I4) + df(PF, PB) + (df(PE, PI) << 2);
+                    if (e <= i) {
+                        var px = df(PE, PF) <= df(PE, PH) ? PF : PH;
+                        if (e < i && (!eq(PF, PB) && !eq(PH, PD) || eq(PE, PI) && (!eq(PF, I4) && !eq(PH, I5)) || eq(PE, PG) || eq(PE, PC))) {
+                            var ke = df(PF, PG);
+                            var ki = df(PH, PC);
+                            var left = ke << 1 <= ki && PE != PG && PD != PG;
+                            var up = ke >= ki << 1 && PE != PC && PB != PC;
+                            if (left && up) {
+                                E[N3] = alphaBlend224W(E[N3], px);
+                                E[N2] = alphaBlend64W(E[N2], px);
+                                E[N1] = E[N2];
+                            } else if (left) {
+                                E[N3] = alphaBlend192W(E[N3], px);
+                                E[N2] = alphaBlend64W(E[N2], px);
+                            } else if (up) {
+                                E[N3] = alphaBlend192W(E[N3], px);
+                                E[N1] = alphaBlend64W(E[N1], px);
+                            } else {
+                                E[N3] = alphaBlend128W(E[N3], px);
+                            }
+                        } else {
+                            E[N3] = alphaBlend128W(E[N3], px);
+                        }
+                    }
+                }
+            }
+
+            function FILT3(E, PE, PI, PH, PF, PG, PC, PD, PB, PA, G5, C4, G0, D0, C1, B1, F4, I4, H5, I5, A0, A1, N0, N1, N2, N3, N4, N5, N6, N7, N8) {
+                if (PE != PH && PE != PF) {
+                    var e = df(PE, PC) + df(PE, PG) + df(PI, H5) + df(PI, F4) + (df(PH, PF) << 2);
+                    var i = df(PH, PD) + df(PH, I5) + df(PF, I4) + df(PF, PB) + (df(PE, PI) << 2);
+                    if (e <= i) {
+                        var px = df(PE, PF) <= df(PE, PH) ? PF : PH;
+                        if (e < i && (!eq(PF, PB) && !eq(PF, PC) || !eq(PH, PD) && !eq(PH, PG) || eq(PE, PI) && (!eq(PF, F4) && !eq(PF, I4) || !eq(PH, H5) && !eq(PH, I5)) || eq(PE, PG) || eq(PE, PC))) {
+                            var ke = df(PF, PG);
+                            var ki = df(PH, PC);
+                            var left = ke << 1 <= ki && PE != PG && PD != PG;
+                            var up = ke >= ki << 1 && PE != PC && PB != PC;
+                            if (left && up) {
+                                E[N7] = alphaBlend192W(E[N7], px);
+                                E[N6] = alphaBlend64W(E[N6], px);
+                                E[N5] = E[N7];
+                                E[N2] = E[N6];
+                                E[N8] = px;
+                            } else if (left) {
+                                E[N7] = alphaBlend192W(E[N7], px);
+                                E[N5] = alphaBlend64W(E[N5], px);
+                                E[N6] = alphaBlend64W(E[N6], px);
+                                E[N8] = px;
+                            } else if (up) {
+                                E[N5] = alphaBlend192W(E[N5], px);
+                                E[N7] = alphaBlend64W(E[N7], px);
+                                E[N2] = alphaBlend64W(E[N2], px);
+                                E[N8] = px;
+                            } else {
+                                E[N8] = alphaBlend224W(E[N8], px);
+                                E[N5] = alphaBlend32W(E[N5], px);
+                                E[N7] = alphaBlend32W(E[N7], px);
+                            }
+                        } else {
+                            E[N8] = alphaBlend128W(E[N8], px);
+                        }
+                    }
+                }
+            }
+
+            function FILT4(E, PE, PI, PH, PF, PG, PC, PD, PB, PA, G5, C4, G0, D0, C1, B1, F4, I4, H5, I5, A0, A1, N15, N14, N11, N3, N7, N10, N13, N12, N9, N6, N2, N1, N5, N8, N4, N0) {
+                if (PE != PH && PE != PF) {
+                    var e = df(PE, PC) + df(PE, PG) + df(PI, H5) + df(PI, F4) + (df(PH, PF) << 2);
+                    var i = df(PH, PD) + df(PH, I5) + df(PF, I4) + df(PF, PB) + (df(PE, PI) << 2);
+                    if (e <= i) {
+                        var px = df(PE, PF) <= df(PE, PH) ? PF : PH;
+                        if (e < i && (!eq(PF, PB) && !eq(PH, PD) || eq(PE, PI) && (!eq(PF, I4) && !eq(PH, I5)) || eq(PE, PG) || eq(PE, PC))) {
+                            var ke = df(PF, PG);
+                            var ki = df(PH, PC);
+                            var left = ke << 1 <= ki && PE != PG && PD != PG;
+                            var up = ke >= ki << 1 && PE != PC && PB != PC;
+                            if (left && up) {
+                                E[N13] = alphaBlend192W(E[N13], px);
+                                E[N12] = alphaBlend64W(E[N12], px);
+                                E[N15] = E[N14] = E[N11] = px;
+                                E[N10] = E[N3] = E[N12];
+                                E[N7] = E[N13];
+                            } else if (left) {
+                                E[N11] = alphaBlend192W(E[N11], px);
+                                E[N13] = alphaBlend192W(E[N13], px);
+                                E[N10] = alphaBlend64W(E[N10], px);
+                                E[N12] = alphaBlend64W(E[N12], px);
+                                E[N14] = px;
+                                E[N15] = px;
+                            } else if (up) {
+                                E[N14] = alphaBlend192W(E[N14], px);
+                                E[N7] = alphaBlend192W(E[N7], px);
+                                E[N10] = alphaBlend64W(E[N10], px);
+                                E[N3] = alphaBlend64W(E[N3], px);
+                                E[N11] = px;
+                                E[N15] = px;
+                            } else {
+                                E[N11] = alphaBlend128W(E[N11], px);
+                                E[N14] = alphaBlend128W(E[N14], px);
+                                E[N15] = px;
+                            }
+                        } else {
+                            E[N15] = alphaBlend128W(E[N15], px);
+                        }
+                    }
+                }
+            }
+
+            var xBR = {};
+
+            xBR.xBR = function (input, output, n, id, jobs) {
+                id = id || 0;
+                jobs = jobs || 1;
+                var slice_start = (input.height * id) / jobs;
+                var slice_end = (input.height * (id + 1)) / jobs;
+                var inputData = new Uint32Array(input.data.buffer);
+                var outputData = new Uint32Array(output.data.buffer);
+                var nl = output.width;
+                var nl1 = nl + nl;
+                var nl2 = nl1 + nl;
+
+                for (var y = slice_start; y < slice_end; y++) {
+                    var line0 = (y - 2) * input.width;
+                    var line1 = (y - 1) * input.width;
+                    var line2 = (y) * input.width;
+                    var line3 = (y + 1) * input.width;
+                    var line4 = (y + 2) * input.width;
+
+                    if (y <= 1) {
+                        if (y === 0) {
+                            line0 = line1 = line2;
+                        } else {
+                            line0 = line1;
+                        }
+                    }
+
+                    if (y >= input.height - 2) {
+                        if (y === input.height - 1) {
+                            line4 = line3 = line2;
+                        } else {
+                            line4 = line3;
+                        }
+                    }
+
+                    for (var x = 0; x < input.width; x++) {
+                        var E = outputData.subarray(y * output.width * n + x * n);
+
+                        var pcurrent = x;
+                        var B1 = inputData[line0 + pcurrent];
+                        var PB = inputData[line1 + pcurrent];
+                        var PE = inputData[line2 + pcurrent];
+                        var PH = inputData[line3 + pcurrent];
+                        var H5 = inputData[line4 + pcurrent];
+
+                        var pprev = x - (x > 0 ? 1 : 0);
+                        var A1 = inputData[line0 + pprev];
+                        var PA = inputData[line1 + pprev];
+                        var PD = inputData[line2 + pprev];
+                        var PG = inputData[line3 + pprev];
+                        var G5 = inputData[line4 + pprev];
+
+                        var pprev2 = pprev - (x > 1 ? 1 : 0);
+                        var A0 = inputData[line1 + pprev2];
+                        var D0 = inputData[line2 + pprev2];
+                        var G0 = inputData[line3 + pprev2];
+
+                        var pnext = x + 1 - (x === input.width - 1 ? 1 : 0);
+                        var C1 = inputData[line0 + pnext];
+                        var PC = inputData[line1 + pnext];
+                        var PF = inputData[line2 + pnext];
+                        var PI = inputData[line3 + pnext];
+                        var I5 = inputData[line4 + pnext];
+
+                        var pnext2 = pnext + 1 - (x >= input.width - 2 ? 1 : 0);
+                        var C4 = inputData[line1 + pnext2];
+                        var F4 = inputData[line2 + pnext2];
+                        var I4 = inputData[line3 + pnext2];
+
+                        if (n === 2) {
+                            E[0] = E[1] =     // 0, 1
+                            E[nl] = E[nl + 1] = PE; // 2, 3
+
+                            filter2x(E, PE, PI, PH, PF, PG, PC, PD, PB, PA, G5, C4, G0, D0, C1, B1, F4, I4, H5, I5, A0, A1, 0, 1, nl, nl + 1);
+                            filter2x(E, PE, PC, PF, PB, PI, PA, PH, PD, PG, I4, A1, I5, H5, A0, D0, B1, C1, F4, C4, G5, G0, nl, 0, nl + 1, 1);
+                            filter2x(E, PE, PA, PB, PD, PC, PG, PF, PH, PI, C1, G0, C4, F4, G5, H5, D0, A0, B1, A1, I4, I5, nl + 1, nl, 1, 0);
+                            filter2x(E, PE, PG, PD, PH, PA, PI, PB, PF, PC, A0, I5, A1, B1, I4, F4, H5, G5, D0, G0, C1, C4, 1, nl + 1, 0, nl);
+                        } else if (n == 3) {
+                            E[0] = E[1] = E[2] =     // 0, 1, 2
+                            E[nl] = E[nl + 1] = E[nl + 2] =     // 3, 4, 5
+                            E[nl1] = E[nl1 + 1] = E[nl1 + 2] = PE; // 6, 7, 8
+
+                            FILT3(E, PE, PI, PH, PF, PG, PC, PD, PB, PA, G5, C4, G0, D0, C1, B1, F4, I4, H5, I5, A0, A1, 0, 1, 2, nl, nl + 1, nl + 2, nl1, nl1 + 1, nl1 + 2);
+                            FILT3(E, PE, PC, PF, PB, PI, PA, PH, PD, PG, I4, A1, I5, H5, A0, D0, B1, C1, F4, C4, G5, G0, nl1, nl, 0, nl1 + 1, nl + 1, 1, nl1 + 2, nl + 2, 2);
+                            FILT3(E, PE, PA, PB, PD, PC, PG, PF, PH, PI, C1, G0, C4, F4, G5, H5, D0, A0, B1, A1, I4, I5, nl1 + 2, nl1 + 1, nl1, nl + 2, nl + 1, nl, 2, 1, 0);
+                            FILT3(E, PE, PG, PD, PH, PA, PI, PB, PF, PC, A0, I5, A1, B1, I4, F4, H5, G5, D0, G0, C1, C4, 2, nl + 2, nl1 + 2, 1, nl + 1, nl1 + 1, 0, nl, nl1);
+                        } else if (n == 4) {
+                            E[0] = E[1] = E[2] = E[3] =     //  0,  1,  2,  3
+                            E[nl] = E[nl + 1] = E[nl + 2] = E[nl + 3] =     //  4,  5,  6,  7
+                            E[nl1] = E[nl1 + 1] = E[nl1 + 2] = E[nl1 + 3] =     //  8,  9, 10, 11
+                            E[nl2] = E[nl2 + 1] = E[nl2 + 2] = E[nl2 + 3] = PE; // 12, 13, 14, 15
+
+                            FILT4(E, PE, PI, PH, PF, PG, PC, PD, PB, PA, G5, C4, G0, D0, C1, B1, F4, I4, H5, I5, A0, A1, nl2 + 3, nl2 + 2, nl1 + 3, 3, nl + 3, nl1 + 2, nl2 + 1, nl2, nl1 + 1, nl + 2, 2, 1, nl + 1, nl1, nl, 0);
+                            FILT4(E, PE, PC, PF, PB, PI, PA, PH, PD, PG, I4, A1, I5, H5, A0, D0, B1, C1, F4, C4, G5, G0, 3, nl + 3, 2, 0, 1, nl + 2, nl1 + 3, nl2 + 3, nl1 + 2, nl + 1, nl, nl1, nl1 + 1, nl2 + 2, nl2 + 1, nl2);
+                            FILT4(E, PE, PA, PB, PD, PC, PG, PF, PH, PI, C1, G0, C4, F4, G5, H5, D0, A0, B1, A1, I4, I5, 0, 1, nl, nl2, nl1, nl + 1, 2, 3, nl + 2, nl1 + 1, nl2 + 1, nl2 + 2, nl1 + 2, nl + 3, nl1 + 3, nl2 + 3);
+                            FILT4(E, PE, PG, PD, PH, PA, PI, PB, PF, PC, A0, I5, A1, B1, I4, F4, H5, G5, D0, G0, C1, C4, nl2, nl1, nl2 + 1, nl2 + 3, nl2 + 2, nl1 + 1, nl, 0, nl + 1, nl1 + 2, nl1 + 3, nl + 3, nl + 2, 1, 2, 3);
+                        }
+                    }
+                }
+            };
+
+            xBR.xBR2x = function (input, output) {
+                xBR.xBR(input, output, 2);
+            };
+
+            xBR.xBR3x = function (input, output) {
+                xBR.xBR(input, output, 3);
+            };
+
+            xBR.xBR4x = function (input, output) {
+                xBR.xBR(input, output, 4);
+            };
+
+            global.xBR = xBR;
+        })();
+
+        onmessage = function (event) {
+            var input = event.data.input;
+            var output = event.data.output;
+            xBR[event.data.scale === 2 ? 'xBR2x' : 'xBR3x'](input, output);
+            postMessage(output, [output.data.buffer]);
+        }
+    </div>
+    <script>
+        var xBRscript = document.getElementById("xBRscript").innerHTML.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
+        try {
+            var worker = new Worker(URL.createObjectURL(new Blob([xBRscript], { type: "text/javascript" })));
+        } catch (err) {
+            //「IE + オフライン + なめらかに拡大」の組み合わせはここでエラーです（揉み潰す）
+        }
+
+        var options = (function() {
+            var options = { charaMethod: 'xbr', charaSize: 2, chipSize: 3, autotile: false, animation: false };
+            var dot = document.getElementById("dot");
+            var xbr = document.getElementById("xbr");
+            var even = document.getElementById("even");
+            var twice = document.getElementById("twice");
+            var three = document.getElementById("three");
+            var chipeven = document.getElementById("chipeven");
+            var chiptwice = document.getElementById("chiptwice");
+            var chipthree = document.getElementById("chipthree");
+            var autotile = document.getElementById("autotile");
+            var animation = document.getElementById("animation");
+            dot.onchange = function() {
+                options.charaMethod = 'dot';
+            };
+            xbr.onchange = function() {
+                options.charaMethod = 'xbr';
+            };            
+            even.onchange = function() {
+                options.charaSize = 1;
+            };
+            twice.onchange = function() {
+                options.charaSize = 2;
+            };
+            three.onchange = function() {
+                options.charaSize = 3;
+            };
+            chipeven.onchange = function() {
+                options.chipSize = 1;
+            };
+            chiptwice.onchange = function() {
+                options.chipSize = 2;
+            };
+            chipthree.onchange = function() {
+                options.chipSize = 3;
+            };
+            autotile.onchange = function() {
+                options.autotile = autotile.checked;
+            };
+            animation.onchange = function() {
+                options.animation = animation.checked;
+            };
+            onload = function() {
+                xbr.checked = true;
+                twice.checked = true;
+                chipthree.checked = true;
+            };
+            return options;
+        })();
+
+        var running = false;
+        var queue = [];
+        var image = document.getElementById("image");
+
+        document.getElementById("dummy").onclick = function () {
+            image.click();
+        }
+
+        image.onchange = function (event) {
+            queue = queue.concat(Array.prototype.slice.call((event.dataTransfer || event.currentTarget).files));
+            if (!running) {
+                running = true;
+                next();
+            }
+            image.value = "";
+        }
+
+        ondragover = function (event) {
+            event.preventDefault();
+        };
+
+        ondrop = function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            image.onchange(event);
+        };
+
+        function next() {
+            if (queue.length === 0) {
+                running = false;
+                return;
+            }
+            urlToImage(URL.createObjectURL(queue.shift()), function (image) {
+                if (image.width === 288 && image.height === 256) {
+                    convertCharset(image, function (result) {
+                        urlToImage(result, function (image) {
+                            document.body.appendChild(image);
+                            next();
+                        });
+                    });
+                } else if (image.width === 192 && image.height === 192) {
+                    urlToImage(convertFaceset(image), function (image) {
+                        document.body.appendChild(image);
+                        next();
+                    });
+                } else if (image.width === 480 && image.height === 256) {
+                    convertChipset(image).forEach(function(tileset) {
+                        var p = document.createElement('p');
+                        p.innerHTML = tileset.desc;
+                        document.body.appendChild(p);
+                        var image = new Image();
+                        image.src = tileset.data;
+                        document.body.appendChild(image);
+                    });
+                    next();
+                } else {
+                    var p = document.createElement('p');
+                    p.innerHTML = '画像のサイズが正しくありません。キャラチップは288*256pxのみ、顔グラは192*192pxのみ、マップチップは480*256pxのみ受け付けます。';
+                    document.body.appendChild(p);
+                    next();
+                }
+            }, function() {
+                var p = document.createElement('p');
+                p.innerHTML = 'これは画像ファイルではありません。';
+                document.body.appendChild(p);
+                next();
+            });
+        }
+
+        function urlToImage(src, callback, errorback) {
+            var image = new Image();
+            image.onload = function () {
+                callback(image);
+            };
+            if (errorback) {
+                image.onerror = function () {
+                    errorback();
+                };
+            }
+            image.src = src;
+        }
+
+        function convertCharset(image, callback) {
+            var canvas = document.createElement("canvas");
+            var ctx = canvas.getContext("2d");
+
+            canvas.width = image.width;
+            canvas.height = image.height;
+
+            ctx.drawImage(image, 0, 0);
+            var charaData = [];
+
+            for (var y = 0; y < image.height; y += 32) {
+                for (var x = 0; x < image.width; x += 24) {
+                    var chara = ctx.getImageData(x, y, 24, 32);
+                    transparent(chara, 0);
+                    charaData.push(chara);
+                }
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            canvas.width += 8 * 12;
+
+            for (var y = 0; y < 8; y++) {
+                for (var x = 0; x < 12; x++) {
+                    var trueY = y % 4 === 2 || y % 4 === 3 ? y - 2 : y % 4 === 1 ? y + 1 : y + 3;
+                    ctx.putImageData(charaData.shift(), x * 32 + 4, trueY * 32);
+                }
+            }
+
+            if (options.charaSize === 1) {
+                callback(canvas.toDataURL());
+                return;
+            }
+
+            var input = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            canvas.width *= options.charaSize;
+            canvas.height *= options.charaSize;
+            var output = ctx.createImageData(canvas.width, canvas.height);
+            if (options.charaMethod === 'dot') {
+                window['dot' + options.charaSize + 'x'](input, output);
+                ctx.putImageData(output, 0, 0);
+                callback(canvas.toDataURL());
+            } else {
+                worker.onmessage = function (event) {
+                    ctx.putImageData(event.data, 0, 0);
+                    callback(canvas.toDataURL());
+                }
+                worker.postMessage({ input: input, output: output, scale: options.charaSize }, [input.data.buffer, output.data.buffer]);
+            }
+        }
+
+        function transparent(imageData, point) {
+            var data = imageData.data;
+
+            for (var y = 0; y < imageData.height; y++) {
+                for (var x = 0; x < imageData.width; x++) {
+                    var i = (x + y * imageData.width) * 4;
+                    if (data[i] === data[point + 0] && data[i + 1] === data[point + 1] && data[i + 2] === data[point + 2]) {
+                        data[i + 3] = 0;
+                    }
+                }
+            }
+        }
+
+		function dot2x(input, output) {
+            var inputData = new Uint32Array(input.data.buffer);
+            var outputData = new Uint32Array(output.data.buffer);
+
+            for (var y = 0; y < input.height; y++) {
+                for (var x = 0; x < input.width; x++) {
+                    var i = (x + y * input.width * 2) * 2;
+                    outputData[i] = outputData[i + 1] = outputData[i + input.width * 2] =
+                    outputData[i + 1 + input.width * 2] = inputData[x + y * input.width];
+                }
+            }
+        }
+
+        function dot3x(input, output) {
+            var inputData = new Uint32Array(input.data.buffer);
+            var outputData = new Uint32Array(output.data.buffer);
+
+            for (var y = 0; y < input.height; y++) {
+                for (var x = 0; x < input.width; x++) {
+                    var i = (x + y * input.width * 3) * 3;
+                    outputData[i] = outputData[i + 1] = outputData[i + 2] = outputData[i + input.width * 3] =
+                    outputData[i + 1 + input.width * 3] = outputData[i + 2 + input.width * 3] =
+                    outputData[i + input.width * 6] = outputData[i + 1 + input.width * 6] =
+                    outputData[i + 2 + input.width * 6] = inputData[x + y * input.width];
+                }
+            }
+        }
+
+        function convertFaceset(image) {
+            var canvas = document.createElement("canvas");
+            var ctx = canvas.getContext("2d");
+
+            canvas.width = image.width * 3;
+            canvas.height = image.height * 3;
+
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL();
+        }
+
+        function convertChipset(image) {
+            function putHalfTile(dx, dy, sx, sy) {
+                ctx.putImageData(imageData, (dx - sx) * tileSize, (dy - sy) * tileSize, sx * tileSize, sy * tileSize, tileSize / 2, tileSize / 2);
+            }
+
+            function putFullTile(dx, dy, sx, sy) {
+                ctx.putImageData(imageData, (dx - sx) * tileSize, (dy - sy) * tileSize, sx * tileSize, sy * tileSize, tileSize, tileSize);
+            }
+
+            function putRectangle(dx, dy, sx, sy, sw, sh) {
+                ctx.putImageData(imageData, (dx - sx) * tileSize, (dy - sy) * tileSize, sx * tileSize, sy * tileSize, tileSize * sw, tileSize * sh);
+            }
+
+            function putCircle(dx, dy, sx, sy) {
+                putHalfTile(dx + 0.5, dy + 0.5, sx + 2.5, sy + 0.5);
+                putHalfTile(dx + 1, dy + 0.5, sx + 2, sy + 0.5);
+                putHalfTile(dx + 0.5, dy + 1, sx + 2.5, sy + 0);
+                putHalfTile(dx + 1, dy + 1, sx + 2, sy + 0);
+            }
+
+            function putAutoTile(dx, dy, sx, sy) {
+                putFullTile(dx + 0, dy + 0, sx + 0, sy + 0);
+                putFullTile(dx + 1, dy + 0, sx + 2, sy + 0);
+                //角優先に選別、中央に装飾などがある場合失われる
+                //2000規格でも2x2にタイルを置いた時のために一応角同士がつながるようになっているため、角優先を採用
+                putFullTile(dx + 0, dy + 1, sx + 0, sy + 1);
+                putFullTile(dx + 1, dy + 1, sx + 2, sy + 1);
+                putFullTile(dx + 0, dy + 2, sx + 0, sy + 3);
+                putFullTile(dx + 1, dy + 2, sx + 2, sy + 3);
+                //中央優先に選別、角に装飾などがある場合失われる
+                /*putHalfTile(dx + 0, dy + 1, sx + 0, sy + 1);
+                putHalfTile(dx + 0.5, dy + 1, sx + 1.5, sy + 1);
+                putHalfTile(dx + 1, dy + 1, sx + 1, sy + 1);
+                putHalfTile(dx + 1.5, dy + 1, sx + 2.5, sy + 1);
+                putHalfTile(dx + 0, dy + 1.5, sx + 0, sy + 2.5);
+                putHalfTile(dx + 0.5, dy + 1.5, sx + 1.5, sy + 2.5);
+                putHalfTile(dx + 1, dy + 1.5, sx + 1, sy + 2.5);
+                putHalfTile(dx + 1.5, dy + 1.5, sx + 2.5, sy + 2.5);
+                putHalfTile(dx + 0, dy + 2, sx + 0, sy + 2);
+                putHalfTile(dx + 0.5, dy + 2, sx + 1.5, sy + 2);
+                putHalfTile(dx + 1, dy + 2, sx + 1, sy + 2);
+                putHalfTile(dx + 1.5, dy + 2, sx + 2.5, sy + 2);
+                putHalfTile(dx + 0, dy + 2.5, sx + 0, sy + 3.5);
+                putHalfTile(dx + 0.5, dy + 2.5, sx + 1.5, sy + 3.5);
+                putHalfTile(dx + 1, dy + 2.5, sx + 1, sy + 3.5);
+                putHalfTile(dx + 1.5, dy + 2.5, sx + 2.5, sy + 3.5);*/
+            }
+
+            function putAllAutoTile(dx, dy, sx, sy) {
+                putRectangle(dx + 0, dy + 0, sx + 0, sy + 0, 3, 4);
+                putHalfTile(dx + 1, dy + 0, sx + 0, sy + 1);
+                putHalfTile(dx + 1.5, dy + 0, sx + 2.5, sy + 1);
+                putHalfTile(dx + 1, dy + 0.5, sx + 0, sy + 3.5);
+                putHalfTile(dx + 1.5, dy + 0.5, sx + 2.5, sy + 3.5);
+                putFullTile(dx + 0, dy + 4, sx + 1, sy + 2);
+                putFullTile(dx + 1, dy + 4, sx + 1, sy + 2);
+                putFullTile(dx + 2, dy + 4, sx + 1, sy + 2);
+                putFullTile(dx + 0, dy + 5, sx + 1, sy + 2);
+                putFullTile(dx + 1, dy + 5, sx + 1, sy + 2);
+                putFullTile(dx + 2, dy + 5, sx + 1, sy + 2);
+                putHalfTile(dx + 0, dy + 4.5, sx + 2, sy + 0.5);
+                putHalfTile(dx + 0, dy + 5, sx + 2, sy + 0);
+                putHalfTile(dx + 0.5, dy + 4.5, sx + 2.5, sy + 0.5);
+                putHalfTile(dx + 0.5, dy + 5, sx + 2.5, sy + 0);
+                putHalfTile(dx + 1.5, dy + 4, sx + 2.5, sy + 0);
+                putHalfTile(dx + 1.5, dy + 4.5, sx + 2.5, sy + 0.5);
+                putHalfTile(dx + 2, dy + 4, sx + 2, sy + 0);
+                putHalfTile(dx + 2, dy + 4.5, sx + 2, sy + 0.5);
+                putHalfTile(dx + 1, dy + 5.5, sx + 2, sy + 0.5);
+                putHalfTile(dx + 1.5, dy + 5, sx + 2.5, sy + 0);
+                putHalfTile(dx + 2, dy + 5, sx + 2, sy + 0);
+                putHalfTile(dx + 2.5, dy + 5.5, sx + 2.5, sy + 0.5);
+                putFullTile(dx + 3, dy + 0, sx + 1, sy + 2);
+                putFullTile(dx + 4, dy + 0, sx + 1, sy + 2);
+                putFullTile(dx + 3, dy + 1, sx + 1, sy + 2);
+                putFullTile(dx + 4, dy + 1, sx + 1, sy + 2);
+                putCircle(dx + 3, dy + 0, sx, sy);
+                putFullTile(dx + 3, dy + 2, sx + 2, sy + 0);
+                putFullTile(dx + 4, dy + 2, sx + 2, sy + 0);
+                putFullTile(dx + 3, dy + 3, sx + 2, sy + 0);
+                putFullTile(dx + 4, dy + 3, sx + 2, sy + 0);
+                putHalfTile(dx + 3, dy + 2, sx + 1, sy + 2);
+                putHalfTile(dx + 4.5, dy + 2, sx + 1.5, sy + 2);
+                putHalfTile(dx + 3, dy + 3.5, sx + 1, sy + 2.5);
+                putHalfTile(dx + 4.5, dy + 3.5, sx + 1.5, sy + 2.5);
+                putFullTile(dx + 3, dy + 4, sx + 0, sy + 1);
+                putFullTile(dx + 4, dy + 4, sx + 2, sy + 1);
+                putFullTile(dx + 3, dy + 5, sx + 0, sy + 3);
+                putFullTile(dx + 4, dy + 5, sx + 2, sy + 3);
+                putCircle(dx + 3, dy + 4, sx, sy);
+                putRectangle(dx + 5, dy + 0, sx + 0, sy + 1, 0.5, 3);
+                putRectangle(dx + 5.5, dy + 0, sx + 2.5, sy + 1, 0.5, 3);
+                putFullTile(dx + 6, dy + 0, sx + 0, sy + 2);
+                putFullTile(dx + 6, dy + 1, sx + 0, sy + 2);
+                putFullTile(dx + 6, dy + 2, sx + 0, sy + 2);
+                putFullTile(dx + 7, dy + 0, sx + 2, sy + 2);
+                putFullTile(dx + 7, dy + 1, sx + 2, sy + 2);
+                putFullTile(dx + 7, dy + 2, sx + 2, sy + 2);
+                putCircle(dx + 6, dy + 0, sx, sy);
+                putCircle(dx + 6, dy + 1, sx, sy);
+                putRectangle(dx + 5, dy + 3, sx + 0, sy + 1, 3, 0.5);
+                putRectangle(dx + 5, dy + 3.5, sx + 0, sy + 3.5, 3, 0.5);
+                putFullTile(dx + 5, dy + 4, sx + 1, sy + 1);
+                putFullTile(dx + 6, dy + 4, sx + 1, sy + 1);
+                putFullTile(dx + 7, dy + 4, sx + 1, sy + 1);
+                putFullTile(dx + 5, dy + 5, sx + 1, sy + 3);
+                putFullTile(dx + 6, dy + 5, sx + 1, sy + 3);
+                putFullTile(dx + 7, dy + 5, sx + 1, sy + 3);
+                putCircle(dx + 5, dy + 4, sx, sy);
+                putCircle(dx + 6, dy + 4, sx, sy);
+            }
+
+            var canvas = document.createElement("canvas");
+            var ctx = canvas.getContext("2d");
+
+            canvas.width = image.width;
+            canvas.height = image.height;
+
+            ctx.drawImage(image, 0, 0);
+
+            var prevData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            transparent(prevData, (18 + 8 * prevData.width) * 16 * 4);
+            var imageData = ctx.createImageData(canvas.width * options.chipSize, canvas.height * options.chipSize);
+            switch (options.chipSize) {
+                case 1:
+                    imageData = prevData;
+                    break;
+                case 2:
+                    dot2x(prevData, imageData);
+                    break;
+                case 3:
+                    dot3x(prevData, imageData);
+                    break;
+                default:
+                    break;
+            }
+
+            var tileSize = 16 * options.chipSize;
+            var tilesets = [];
+
+            // TileA1 水タイル
+            canvas.width = 768 / 3 * options.chipSize;
+            canvas.height = 576 / 3 * options.chipSize;
+
+            // TileA1 ブロックA(D) 海タイル Dは深海タイルとの接続が不自然
+            var offset = 0;
+            do {
+                for (var i = 0; i < 3; i++) {
+                    var dx = i * 2;
+                    var sx = i + offset / 2;
+                    putFullTile(dx + 0, offset + 0, sx + 0, 0);
+                    putFullTile(dx + 1, offset + 0, sx + 0, 3);
+                    putHalfTile(dx + 0, offset + 1, sx + 0, 0);
+                    putHalfTile(dx + 0.5, offset + 1, sx + 0.5, 2);
+                    putHalfTile(dx + 1, offset + 1, sx + 0, 2);
+                    putHalfTile(dx + 1.5, offset + 1, sx + 0.5, 0);
+                    putHalfTile(dx + 0, offset + 1.5, sx + 0, 1.5);
+                    putHalfTile(dx + 0.5, offset + 1.5, sx - offset / 2 + 0.5, 4.5);
+                    putHalfTile(dx + 1, offset + 1.5, sx - offset / 2 + 0, 4.5);
+                    putHalfTile(dx + 1.5, offset + 1.5, sx + 0.5, 1.5);
+                    putHalfTile(dx + 0, offset + 2, sx + 0, 1);
+                    putHalfTile(dx + 0.5, offset + 2, sx - offset / 2 + 0.5, 4);
+                    putHalfTile(dx + 1, offset + 2, sx - offset / 2 + 0, 4);
+                    putHalfTile(dx + 1.5, offset + 2, sx + 0.5, 1);
+                    putHalfTile(dx + 0, offset + 2.5, sx + 0, 0.5);
+                    putHalfTile(dx + 0.5, offset + 2.5, sx + 0.5, 2.5);
+                    putHalfTile(dx + 1, offset + 2.5, sx + 0, 2.5);
+                    putHalfTile(dx + 1.5, offset + 2.5, sx + 0.5, 0.5);
+                }
+                offset += 6;
+            } while (offset === 6);
+
+            // TileA1 ブロックB 深海タイル
+            for (var i = 0; i < 3; i++) {
+                var dx = i * 2;
+                var sx = i;
+                putFullTile(dx + 0, 3, sx + 0, 6);
+                putFullTile(dx + 1, 3, sx + 0, 7);
+                putFullTile(dx + 0, 4, sx + 0, 7);
+                putFullTile(dx + 1, 4, sx + 0, 7);
+                putFullTile(dx + 0, 5, sx + 0, 7);
+                putFullTile(dx + 1, 5, sx + 0, 7);
+                putHalfTile(dx + 0, 4, sx + 0, 6);
+                putHalfTile(dx + 1.5, 4, sx + 0.5, 6);
+                putHalfTile(dx + 0, 5.5, sx + 0, 6.5);
+                putHalfTile(dx + 1.5, 5.5, sx + 0.5, 6.5);
+            }
+
+            // TileA1 ブロックE 滝タイル 4コマ目が失われる
+            for (var i = 0; i < 3; i++) {
+                for (var j = 14; j < 16; j++) {
+                    for (var k = 0; k < 3; k++) {
+                        putFullTile(j, k + i * 3, i + 3, k + 4);
+                    }
+                }
+            }
+
+            tilesets.push({ desc: 'A1 水タイル', data: canvas.toDataURL() });
+
+            // TileA2 ブロックAのみ オートタイル 親パターンが失われるため、一部オートタイル間の接続が不自然
+            canvas.width = 768 / 3 * options.chipSize;
+            canvas.height = 576 / 3 * options.chipSize;
+
+            putAutoTile(0, 0, 0, 8);
+            putAutoTile(2, 0, 3, 8);
+            putAutoTile(4, 0, 0, 12);
+            putAutoTile(6, 0, 3, 12);
+            putAutoTile(0, 3, 6, 0);
+            putAutoTile(2, 3, 9, 0);
+            putAutoTile(4, 3, 6, 4);
+            putAutoTile(6, 3, 9, 4);
+            putAutoTile(0, 6, 6, 8);
+            putAutoTile(2, 6, 9, 8);
+            putAutoTile(4, 6, 6, 12);
+            putAutoTile(6, 6, 9, 12);
+            ctx.fillRect(8 * tileSize, 0 * tileSize, 8 * tileSize, 12 * tileSize);
+
+            tilesets.push({ desc: 'A2 オートタイル', data: canvas.toDataURL() });
+
+            // TileA5 通常下層タイル
+            canvas.width = 384 / 3 * options.chipSize;
+            canvas.height = 768 / 3 * options.chipSize;
+
+            putRectangle(0, 0, 12, 0, 6, 16);
+            putRectangle(6, 0, 18, 0, 2, 8);
+            putRectangle(6, 8, 20, 0, 2, 8);
+
+            tilesets.push({ desc: 'A5 下層タイル（通常）', data: canvas.toDataURL() });
+
+            // TileB 上層タイル＋通常下層タイルの残り
+            canvas.width = 768 / 3 * options.chipSize;
+            canvas.height = 768 / 3 * options.chipSize;
+
+            putRectangle(0, 0, 18, 8, 6, 8);
+            putRectangle(0, 8, 24, 0, 6, 8);
+            putRectangle(8, 0, 24, 8, 6, 8);
+            putRectangle(8, 8, 18, 0, 6, 8);
+
+            tilesets.push({ desc: 'B 上層タイル＋下層タイル（通常）の残り', data: canvas.toDataURL() });
+
+            // おまけ オートタイル全パターン
+            if (options.autotile) {
+                canvas.width = 768 / 3 * options.chipSize;
+                canvas.height = 768 / 3 * options.chipSize;
+
+                putAllAutoTile(0, 0, 0, 8);
+                putAllAutoTile(0, 8, 3, 8);
+                putAllAutoTile(8, 0, 0, 12);
+                putAllAutoTile(8, 8, 3, 12);
+
+                tilesets.push({ desc: '（おまけ） C オートタイル全パターン', data: canvas.toDataURL() });
+
+                canvas.width = 768 / 3 * options.chipSize;
+                canvas.height = 768 / 3 * options.chipSize;
+
+                putAllAutoTile(0, 0, 6, 0);
+                putAllAutoTile(0, 8, 9, 0);
+                putAllAutoTile(8, 0, 6, 4);
+                putAllAutoTile(8, 8, 9, 4);
+
+                tilesets.push({ desc: '（おまけ） D オートタイル全パターン', data: canvas.toDataURL() });
+
+                canvas.width = 768 / 3 * options.chipSize;
+                canvas.height = 768 / 3 * options.chipSize;
+
+                putAllAutoTile(0, 0, 6, 8);
+                putAllAutoTile(0, 8, 9, 8);
+                putAllAutoTile(8, 0, 6, 12);
+                putAllAutoTile(8, 8, 9, 12);
+
+                tilesets.push({ desc: '（おまけ） E オートタイル全パターン', data: canvas.toDataURL() });
+            }
+
+            // !$Animation アニメーション（4コマ目あり） キャラグラ 右回転でアニメーション
+            if (options.animation) {
+                canvas.width = tileSize * 3;
+                canvas.height = tileSize * 4;
+
+                putRectangle(0, 0, 3, 4, 3, 2);
+                putRectangle(0, 2, 3, 7, 3, 1);
+                putRectangle(0, 3, 3, 6, 3, 1);
+
+                tilesets.push({ desc: '（おまけ） アニメーション（4コマ目あり） ファイル名先頭に!$をつけてキャラクターフォルダへ　右回転でアニメーション', data: canvas.toDataURL() });
+            }
+
+            return tilesets;
+        }
+        </script>
+</body>
+</html>
